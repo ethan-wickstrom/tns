@@ -15,7 +15,7 @@ export interface ScaffoldConfig {
   readonly description: string
 }
 
-/** Single representation of the dependency specs mandated by AGENTS.md. */
+/** Single representation of the dependency specs mandated by docs/new-tool.md. */
 export const RUNTIME_DEPS = {
   "@effect/platform-bun": "beta",
   effect: "beta"
@@ -26,7 +26,7 @@ export const RUNTIME_DEPS = {
  *
  * `--bytecode` is deliberately absent: bytecode generation fails for
  * Effect-based bundles on current Bun ("Failed to generate bytecode",
- * oven-sh/bun issue 15528 family) and per AGENTS.md a build only counts
+ * oven-sh/bun issue 15528 family) and per docs/compilation.md a build only counts
  * when the produced binary is verified to run. Re-add it only after a
  * verified successful build + smoke test. Cross-compiles must never use
  * bytecode (oven-sh/bun issues 27454, 18416).

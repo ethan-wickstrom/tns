@@ -52,4 +52,5 @@ bun install
 Per package: `bun run check` (typecheck), `bun run test` (vitest),
 `bun run build` (compile the executable).
 
-See `AGENTS.md` for the full conventions.
+See `AGENTS.md` for the essentials and the `docs/` folder for the full
+conventions.

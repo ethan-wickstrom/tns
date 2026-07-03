@@ -4,7 +4,7 @@
   "workspaces": ["packages/*", "deprecated/*"],
   "scripts": {
     "prepare": "bunx effect-language-service patch || true",
-    "check": "bunx tsc --noEmit",
+    "check": "bun run --filter '*' check",
     "test": "vitest run",
     "build": "bun run --filter '*' build"
   },
