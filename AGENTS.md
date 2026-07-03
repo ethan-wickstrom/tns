@@ -7,6 +7,30 @@ Build command-line tools in TypeScript. `tns` stands for "Tools 'n Stuff".
 - Every finished CLI is compiled to a single-file executable with
   `bun build --compile`.
 
+# Repository layout
+
+This is a Bun workspaces monorepo. One tool lives in one workspace package.
+
+```
+tools.json          # the tool index: the single authoritative list of tools
+tsconfig.base.json  # the single representation of the strict compiler options
+packages/*          # active tools (one Bun workspace package each)
+deprecated/*        # deprecated tools, moved here by `tns deprecate`
+```
+
+`tools.json`, not the directory layout, defines which tools exist. Never
+edit `tools.json` by hand. The `tns` CLI (in `packages/tns`) is its only
+sanctioned writer, through the Registry module. `tns new <name>` scaffolds
+a conforming package and registers it in one atomic step. `tns deprecate
+<name>` moves a tool to `deprecated/` while the index keeps resolving its
+name. `tns list` and `tns which <name>` read the index.
+
+Shared dev dependencies (`typescript`, `vitest`, `@effect/vitest`,
+`@effect/language-service`, `@types/bun`) live in the root `package.json`.
+Each package declares only its runtime dependencies and extends
+`../../tsconfig.base.json`. From the root, `bun run check` type-checks,
+`bun run test` runs vitest, and `bun run build` builds every package.
+
 # Sources of truth
 
 Effect v4 is a beta and its API changes between releases. Do not trust
@@ -35,41 +59,28 @@ not `Effect.Service` with a `dependencies` field. Tagged errors use
 
 # Project setup
 
+To add a tool to this monorepo, run `tns new <name>` (build it first with
+`cd packages/tns && bun run build` if needed). The scaffolder writes the
+package, installs dependencies, and registers the tool in `tools.json`. Do
+not create packages by hand.
+
+For a standalone project outside this monorepo:
+
 ```bash
 bun add effect@beta @effect/platform-bun@beta
-bun add -d @effect/language-service typescript @types/bun
-bun add -D vitest @effect/vitest@beta
+bun add -d @effect/language-service typescript @types/bun vitest @effect/vitest@beta
 ```
 
 Install the Effect Language Service. Add
 `{ "name": "@effect/language-service" }` to the tsconfig plugins array and
 add the schema URL at the top level of tsconfig for editor validation. Run
 `bunx effect-language-service patch` and persist it with a `prepare` script
-so type checking reports Effect diagnostics.
+so type checking reports Effect diagnostics. In this monorepo, the root
+`package.json` already has that `prepare` script.
 
-Baseline tsconfig.json:
-
-```jsonc
-{
-  "$schema": "https://raw.githubusercontent.com/Effect-TS/language-service/refs/heads/main/schema.json",
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "NodeNext",
-    "moduleDetection": "force",
-    "strict": true,
-    "exactOptionalPropertyTypes": true,
-    "noUnusedLocals": true,
-    "noImplicitOverride": true,
-    "verbatimModuleSyntax": true,
-    "skipLibCheck": true,
-    "noEmit": true,
-    "sourceMap": true,
-    "resolveJsonModule": true,
-    "types": ["bun"],
-    "plugins": [{ "name": "@effect/language-service" }]
-  }
-}
-```
+The strict compiler options live in `tsconfig.base.json` at the repo root.
+Package tsconfigs extend it and add only `include`. For a standalone
+project, copy `tsconfig.base.json` as the baseline.
 
 TypeScript 6 and 7 no longer discover `@types` packages on their own, so
 `"types": ["bun"]` is required.
@@ -78,6 +89,10 @@ TypeScript 6 and 7 no longer discover `@types` packages on their own, so
 
 These conventions are stable across beta releases. Exact signatures are not,
 so check the sources of truth for those.
+
+Imports:
+- Import local modules with an explicit `.ts` extension (the base tsconfig
+  sets `allowImportingTsExtensions`). Bun resolves these directly.
 
 Sequencing and tracing:
 - Use `Effect.gen(function* () { ... })` and `yield*` for all sequencing.
@@ -91,8 +106,8 @@ Sequencing and tracing:
 
 Services and layers:
 - Define services as `Context.Service` classes with unique tag strings in
-  the form `@app/Name`, readonly methods, and no requirements in method
-  signatures.
+  the form `@<tool-name>/Name` (e.g. `@tns/Registry`), readonly methods,
+  and no requirements in method signatures.
 - Implement services as static layer properties (`layer`, `testLayer`,
   named variants) built with `Layer.effect`, `Layer.sync`, or
   `Layer.succeed`. Inside a layer, first `yield*` the dependencies, then
@@ -135,17 +150,23 @@ automatically.
 Entry point shape:
 
 ```typescript
-import { BunServices, BunRuntime } from "@effect/platform-bun"
-import { Command } from "effect/unstable/cli"
+import { BunRuntime, BunServices } from "@effect/platform-bun"
 import { Effect, Layer } from "effect"
-import pkg from "./package.json" with { type: "json" }
+import { Command } from "effect/unstable/cli"
+import pkg from "../package.json" with { type: "json" }
+
+const AppLayer = MyService.layer.pipe(
+  Layer.provideMerge(BunServices.layer)
+)
 
 app.pipe(
   Command.run({ version: pkg.version }),
-  Effect.provide(Layer.mergeAll(AppLayer, BunServices.layer)),
+  Effect.provide(AppLayer),
   BunRuntime.runMain
 )
 ```
+
+`packages/tns/src/cli.ts` is a working example of this shape.
 
 Only the entry file imports platform-specific modules. All other code
 imports abstractions such as `FileSystem` and `Terminal` from `effect`.
@@ -172,22 +193,32 @@ When the code type-checks and the tests pass, compile the executable.
 Default build for the machine you are on:
 
 ```bash
-bun build --compile --minify --sourcemap --bytecode ./src/cli.ts --outfile mycli
+bun build --compile --minify --sourcemap ./src/cli.ts --outfile mycli
 ```
 
-Three safety rules govern the `--bytecode` flag. Each comes from a
-confirmed Bun bug, so verify rather than trust.
+Do not add `--bytecode`. Bytecode generation fails for Effect v4 bundles on
+current Bun (verified on Bun 1.3.14: the build prints "Failed to generate
+bytecode", still exits 0, and the produced binary crashes at startup with a
+CommonJS wrapper TypeError). `COMPILE_FLAGS` in
+`packages/tns/src/blueprint.ts` is the single representation of these
+flags, and the scaffolder writes them into every new package. Re-add
+`--bytecode` only after a verified successful build plus a smoke test of
+the binary.
+
+If `--bytecode` ever becomes viable again, three safety rules govern it.
+Each comes from a confirmed Bun bug, so verify rather than trust.
 
 1. Do not combine `--bytecode` with `--format esm`. This pairing has
    produced binaries that fail at startup with missing module errors
-   (oven-sh/bun issue 27454). Use bytecode with the default CommonJS
-   output.
+   (oven-sh/bun issue 27454, closed in March 2026, but verify on your Bun
+   version). Use bytecode with the default CommonJS output.
 2. Do not combine `--bytecode` with a cross-compile `--target`. Bytecode
    built on one platform can crash a binary made for another, and the
    version check does not catch it (oven-sh/bun issue 18416). When
    cross-compiling, drop `--bytecode`.
 3. Bytecode generation can fail without failing the build (oven-sh/bun
-   issue 15528). After every build, check stderr for a bytecode failure
+   issue 15528, still open). A zero exit code from `bun build` proves
+   nothing. After every build, check stderr for a bytecode failure
    message and run the binary. `./mycli --help` and one real command must
    succeed before you declare the work done. If in doubt, run with
    `BUN_JSC_verboseDiskCache=1` and look for a cache hit line.
@@ -210,11 +241,14 @@ Other compile facts:
 # Workflow
 
 1. Verify any uncertain API against the sources of truth.
-2. Scaffold the project: `src/` for schemas, services, commands, and the
-   entry file, plus `tests/` and the tsconfig above.
+2. Scaffold the tool with `tns new <name>`. It creates `src/` for schemas,
+   services, commands, and the entry file, plus `tests/` and a tsconfig
+   that extends `tsconfig.base.json`, and registers the tool in
+   `tools.json`.
 3. Model the domain with branded types, schema classes, and tagged errors.
 4. Define service contracts, then production and test layers.
 5. Write thin command handlers over the services.
 6. Run the tests until green.
 7. Run `bunx tsc --noEmit` until it reports zero errors.
-8. Compile per the rules above and smoke-test the binary.
+8. Compile per the rules above and smoke-test the binary. Run `--help` and
+   at least one real command before declaring the work done.
