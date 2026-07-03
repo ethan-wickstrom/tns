@@ -1,0 +1,18 @@
+{
+  "name": "tns-monorepo",
+  "private": true,
+  "workspaces": ["packages/*", "deprecated/*"],
+  "scripts": {
+    "prepare": "bunx effect-language-service patch || true",
+    "check": "bunx tsc --noEmit",
+    "test": "vitest run",
+    "build": "bun run --filter '*' build"
+  },
+  "devDependencies": {
+    "@effect/language-service": "latest",
+    "@effect/vitest": "beta",
+    "@types/bun": "latest",
+    "typescript": "latest",
+    "vitest": "latest"
+  }
+}

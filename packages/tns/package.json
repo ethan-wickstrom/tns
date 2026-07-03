@@ -1,0 +1,15 @@
+{
+  "name": "tns",
+  "version": "0.1.0",
+  "description": "Tools 'n Stuff: scaffold and index opinionated CLIs in this monorepo",
+  "type": "module",
+  "scripts": {
+    "check": "bunx tsc --noEmit",
+    "test": "vitest run",
+    "build": "bun build --compile --minify --sourcemap --bytecode ./src/cli.ts --outfile tns"
+  },
+  "dependencies": {
+    "@effect/platform-bun": "beta",
+    "effect": "beta"
+  }
+}
