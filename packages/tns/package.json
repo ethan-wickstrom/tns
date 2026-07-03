@@ -6,7 +6,7 @@
   "scripts": {
     "check": "bunx tsc --noEmit",
     "test": "vitest run",
-    "build": "bun build --compile --minify --sourcemap --bytecode ./src/cli.ts --outfile tns"
+    "build": "bun build --compile --minify --sourcemap ./src/cli.ts --outfile tns"
   },
   "dependencies": {
     "@effect/platform-bun": "beta",

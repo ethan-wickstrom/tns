@@ -22,11 +22,16 @@ export const RUNTIME_DEPS = {
 } as const
 
 /**
- * Single representation of the compile flags. `--bytecode` is safe here
- * because the build targets the host platform with CommonJS output; the
- * cross-compile script drops it (oven-sh/bun issues 27454, 18416, 15528).
+ * Single representation of the compile flags.
+ *
+ * `--bytecode` is deliberately absent: bytecode generation fails for
+ * Effect-based bundles on current Bun ("Failed to generate bytecode",
+ * oven-sh/bun issue 15528 family) and per AGENTS.md a build only counts
+ * when the produced binary is verified to run. Re-add it only after a
+ * verified successful build + smoke test. Cross-compiles must never use
+ * bytecode (oven-sh/bun issues 27454, 18416).
  */
-export const COMPILE_FLAGS = "--compile --minify --sourcemap --bytecode"
+export const COMPILE_FLAGS = "--compile --minify --sourcemap"
 export const CROSS_COMPILE_FLAGS = "--compile --minify --sourcemap"
 
 export const packageDir = (name: ToolName): RelativePath =>
@@ -172,6 +177,15 @@ describe("Greeter", () => {
 `
   )
 
+const gitignore = (config: ScaffoldConfig): File =>
+  file(
+    `${packageDir(config.name)}/.gitignore`,
+    `# Compiled single-file executable
+/${config.name}
+/${config.name}.exe
+`
+  )
+
 const readme = (config: ScaffoldConfig): File =>
   file(
     `${packageDir(config.name)}/README.md`,
@@ -198,5 +212,6 @@ export const blueprint = (config: ScaffoldConfig): ReadonlyArray<File> => [
   greeterService(config),
   cliEntry(config),
   greeterTest(config),
+  gitignore(config),
   readme(config)
 ]
